@@ -1,7 +1,7 @@
 # Optimization Problem Formulation
 ## Stress-Relieving Auxiliary Holes for Plate with Central Hole
 
-**Document Version:** 1.0
+**Document Version:** 2.0 (Updated: 4 design variables with y_aux=0 fixed at centerline)
 **Date:** December 2024
 
 ---
@@ -107,18 +107,20 @@ $$
 
 ### 4.2 Design Variables
 
-**Design Vector (with Symmetric Rotation Constraint):**
-$$\mathbf{x} = [x_{aux}, \, y_{aux}, \, a, \, b, \, \theta_R]^T \in \mathbb{R}^5$$
+**Design Vector (with Fixed Centerline and Symmetric Rotation Constraints):**
+$$\mathbf{x} = [x_{aux}, \, a, \, b, \, \theta_R]^T \in \mathbb{R}^4$$
 
-**Note:** The left hole rotation is computed as $\theta_L = -\theta_R$ to enforce symmetry for reverse loading conditions.
+**Fixed Parameters:**
+- $y_{aux} = 0$ (auxiliary holes on centerline): Based on optimization results showing convergence to centerline
+- $\theta_L = -\theta_R$ (symmetric rotation): Enforces symmetry for reverse loading conditions
 
 | Index | Variable | Symbol | Description | Units |
 |-------|----------|--------|-------------|-------|
 | 1 | $x_1$ | $x_{aux}$ | x-coordinate of auxiliary hole center | mm |
-| 2 | $x_2$ | $y_{aux}$ | y-coordinate of auxiliary hole center | mm |
-| 3 | $x_3$ | $a$ | Semi-major axis of ellipse | mm |
-| 4 | $x_4$ | $b$ | Semi-minor axis of ellipse | mm |
-| 5 | $x_5$ | $\theta_R$ | Rotation angle of right auxiliary hole | rad |
+| 2 | $x_2$ | $a$ | Semi-major axis of ellipse | mm |
+| 3 | $x_3$ | $b$ | Semi-minor axis of ellipse | mm |
+| 4 | $x_4$ | $\theta_R$ | Rotation angle of right auxiliary hole | rad |
+| - | (fixed) | $y_{aux}$ | $= 0$ (centerline) | mm |
 | - | (derived) | $\theta_L$ | $= -\theta_R$ (symmetric constraint) | rad |
 
 ### 4.3 Objective Function
@@ -141,12 +143,13 @@ $$\mathbf{x}^L \leq \mathbf{x} \leq \mathbf{x}^U$$
 | Variable | Lower Bound ($x^L$) | Upper Bound ($x^U$) | Rationale |
 |----------|---------------------|---------------------|-----------|
 | $x_{aux}$ | $R_c + a_{max} + \delta_c = 38$ mm | $0.75 \cdot L = 150$ mm | Clear of central hole; not too close to edge |
-| $y_{aux}$ | $0$ mm | $W - \delta_e - b_{max} = 30$ mm | On or above centerline; within plate |
 | $a$ | $6$ mm | $15$ mm | Manufacturability limits |
 | $b$ | $6$ mm | $15$ mm | Manufacturability limits |
 | $\theta_R$ | $-\pi/2$ rad | $+\pi/2$ rad | Full rotation range |
 
-**Note:** $\theta_L = -\theta_R$ is enforced internally (symmetric rotation constraint).
+**Fixed Parameters (not optimized):**
+- $y_{aux} = 0$ (auxiliary holes on centerline)
+- $\theta_L = -\theta_R$ (symmetric rotation constraint)
 
 **Derived Constants:**
 - $\delta_c = 3$ mm (minimum gap from central hole)
@@ -155,17 +158,13 @@ $$\mathbf{x}^L \leq \mathbf{x} \leq \mathbf{x}^U$$
 
 ### 4.5 Inequality Constraints
 
-**Constraint Count:** $m = 7$ inequality constraints
+**Constraint Count:** $m = 5$ inequality constraints (reduced from 7 since $y_{aux} = 0$)
 
 All constraints are formulated as $g_i(\mathbf{x}) \leq 0$:
 
 ---
 
-#### Constraint 1-2: Central Hole Clearance
-
-The auxiliary holes must maintain minimum clearance from the central hole.
-
-**Auxiliary Function — Axis-Aligned Bounding Box (AABB) Extents:**
+#### Auxiliary Function — Axis-Aligned Bounding Box (AABB) Extents:
 
 For a rotated ellipse with semi-axes $a$, $b$ and rotation $\theta$:
 $$e_x(\theta) = \sqrt{a^2 \cos^2\theta + b^2 \sin^2\theta}$$
@@ -174,35 +173,45 @@ $$e_y(\theta) = \sqrt{a^2 \sin^2\theta + b^2 \cos^2\theta}$$
 **Maximum extent (conservative):**
 $$e_{max}(\theta) = \max(e_x(\theta), e_y(\theta))$$
 
-**Constraints:**
-$$g_1(\mathbf{x}) = R_c + e_{max}(\theta_R) + \delta_c - \sqrt{x_{aux}^2 + y_{aux}^2} \leq 0$$
-$$g_2(\mathbf{x}) = R_c + e_{max}(\theta_L) + \delta_c - \sqrt{x_{aux}^2 + y_{aux}^2} \leq 0$$
+---
+
+#### Constraint 1-2: Central Hole Clearance
+
+The auxiliary holes must maintain minimum clearance from the central hole.
+
+**Constraints (with $y_{aux} = 0$, distance simplifies to $x_{aux}$):**
+$$g_1(\mathbf{x}) = R_c + e_{max}(\theta_R) + \delta_c - x_{aux} \leq 0$$
+$$g_2(\mathbf{x}) = R_c + e_{max}(\theta_L) + \delta_c - x_{aux} \leq 0$$
+
+*Note:* With symmetric rotation ($\theta_L = -\theta_R$), $g_1 = g_2$ due to symmetry of extent function.
 
 *Physical meaning:* Distance from ellipse boundary to central hole boundary must exceed $\delta_c$.
 
 ---
 
-#### Constraint 3-4: Plate Right/Left Edge Clearance
+#### Constraint 3: Plate Right Edge Clearance
 
-$$g_3(\mathbf{x}) = x_{aux} + e_x(\theta_R) - (L - \delta_e) \leq 0 \quad \text{(right hole to right edge)}$$
-$$g_4(\mathbf{x}) = x_{aux} + e_x(\theta_L) - (L - \delta_e) \leq 0 \quad \text{(left hole to left edge)}$$
+$$g_3(\mathbf{x}) = x_{aux} + e_x(\theta_R) - (L - \delta_e) \leq 0$$
+
+*Note:* Left edge constraint is identical due to symmetry.
 
 *Physical meaning:* Auxiliary holes must not extend beyond plate boundaries with clearance $\delta_e$.
 
 ---
 
-#### Constraint 5-6: Plate Top/Bottom Edge Clearance
+#### Constraint 4: Plate Top/Bottom Edge Clearance
 
-$$g_5(\mathbf{x}) = |y_{aux}| + e_y(\theta_R) - (W - \delta_e) \leq 0$$
-$$g_6(\mathbf{x}) = |y_{aux}| + e_y(\theta_L) - (W - \delta_e) \leq 0$$
+$$g_4(\mathbf{x}) = e_y(\theta_R) - (W - \delta_e) \leq 0$$
+
+*Note:* Since $y_{aux} = 0$, the constraint simplifies to just the y-extent of the ellipse.
 
 *Physical meaning:* Auxiliary holes must not extend beyond top/bottom plate boundaries.
 
 ---
 
-#### Constraint 7: Aspect Ratio Limit
+#### Constraint 5: Aspect Ratio Limit
 
-$$g_7(\mathbf{x}) = a - \alpha_{max} \cdot b \leq 0$$
+$$g_5(\mathbf{x}) = a - \alpha_{max} \cdot b \leq 0$$
 
 Where $\alpha_{max} = 3.0$ is the maximum allowed aspect ratio.
 
@@ -220,15 +229,13 @@ $$p = 0 \quad \text{(no equality constraints)}$$
 
 | Index | Constraint | Formula | Type |
 |-------|------------|---------|------|
-| $g_1$ | Right hole - central hole clearance | $R_c + e_{max}(\theta_R) + \delta_c - d_c \leq 0$ | Nonlinear |
-| $g_2$ | Left hole - central hole clearance | $R_c + e_{max}(\theta_L) + \delta_c - d_c \leq 0$ | Nonlinear |
-| $g_3$ | Right hole - right edge clearance | $x_{aux} + e_x(\theta_R) - (L - \delta_e) \leq 0$ | Nonlinear |
-| $g_4$ | Left hole - left edge clearance | $x_{aux} + e_x(\theta_L) - (L - \delta_e) \leq 0$ | Nonlinear |
-| $g_5$ | Right hole - top/bottom clearance | $\|y_{aux}\| + e_y(\theta_R) - (W - \delta_e) \leq 0$ | Nonlinear |
-| $g_6$ | Left hole - top/bottom clearance | $\|y_{aux}\| + e_y(\theta_L) - (W - \delta_e) \leq 0$ | Nonlinear |
-| $g_7$ | Aspect ratio | $a - \alpha_{max} \cdot b \leq 0$ | Linear |
+| $g_1$ | Hole - central hole clearance | $R_c + e_{max}(\theta_R) + \delta_c - x_{aux} \leq 0$ | Nonlinear |
+| $g_2$ | (Same as $g_1$ due to symmetry) | $R_c + e_{max}(\theta_L) + \delta_c - x_{aux} \leq 0$ | Nonlinear |
+| $g_3$ | Hole - right edge clearance | $x_{aux} + e_x(\theta_R) - (L - \delta_e) \leq 0$ | Nonlinear |
+| $g_4$ | Hole - top/bottom clearance | $e_y(\theta_R) - (W - \delta_e) \leq 0$ | Nonlinear |
+| $g_5$ | Aspect ratio | $a - \alpha_{max} \cdot b \leq 0$ | Linear |
 
-Where $d_c = \sqrt{x_{aux}^2 + y_{aux}^2}$ is the distance from origin to auxiliary hole center.
+*Note:* With $y_{aux} = 0$ (fixed at centerline), the distance from origin to auxiliary hole center simplifies to $x_{aux}$.
 
 ---
 
@@ -317,10 +324,10 @@ Due to potential local minima, use multiple random starting points:
 
 | Output | Symbol | Description |
 |--------|--------|-------------|
-| Optimal design vector | $\mathbf{x}^*$ | 6 optimal design variables |
+| Optimal design vector | $\mathbf{x}^*$ | 4 optimal design variables: $[x_{aux}, a, b, \theta_R]$ |
 | Optimal objective | $f^*$ | Minimum maximum von Mises stress |
 | Stress concentration factor | $K_t^* = f^*/\sigma_0$ | Optimal SCF |
-| Constraint values | $g_i(\mathbf{x}^*)$ | Should all be $\leq 0$ |
+| Constraint values | $g_i(\mathbf{x}^*)$ | Should all be $\leq 0$ (5 constraints) |
 
 ### 8.2 Comparison Outputs
 
@@ -404,18 +411,20 @@ end
 ### A.1 Design Variable Bounds (Numerical)
 
 ```matlab
-lb = [38, 0, 6, 6, -pi/2];    % Lower bounds (5 variables)
-ub = [150, 30, 15, 15, pi/2]; % Upper bounds (5 variables)
-% Note: theta_L = -theta_R (symmetric constraint enforced internally)
+lb = [38, 6, 6, -pi/2];    % Lower bounds (4 variables)
+ub = [150, 15, 15, pi/2];  % Upper bounds (4 variables)
+% Fixed: y_aux = 0 (centerline)
+% Derived: theta_L = -theta_R (symmetric rotation)
 ```
 
 ### A.2 Constraint Function Signature
 
 ```matlab
 function [c, ceq] = nonlcon(x)
-    % x = [x_aux, y_aux, a, b, theta_R] (5 variables)
-    % theta_L = -theta_R (computed internally)
-    % c: inequality constraints (7x1), c <= 0 for feasible
+    % x = [x_aux, a, b, theta_R] (4 variables)
+    % y_aux = 0 (fixed)
+    % theta_L = -theta_R (derived)
+    % c: inequality constraints (5x1), c <= 0 for feasible
     % ceq: equality constraints (empty)
 end
 ```
@@ -424,8 +433,8 @@ end
 
 ```matlab
 function f = objective(x)
-    % x = [x_aux, y_aux, a, b, theta_R] (5 variables)
-    % theta_L = -theta_R (computed internally)
+    % x = [x_aux, a, b, theta_R] (4 variables)
+    % y_aux = 0 (fixed), theta_L = -theta_R (derived)
     % f: maximum von Mises stress (scalar)
 end
 ```
@@ -435,13 +444,15 @@ end
 The optimization saves results to `optimization_results.mat`:
 ```matlab
 all_results.runs{i}          % Results from each multi-start run
-all_results.runs{i}.x0       % Initial point
-all_results.runs{i}.x_opt    % Optimal point
+all_results.runs{i}.x0       % Initial point (4x1)
+all_results.runs{i}.x_opt    % Optimal point (4x1): [x_aux, a, b, theta_R]
 all_results.runs{i}.fval     % Optimal objective value
 all_results.runs{i}.history  % Convergence history (fval, x per iteration)
 all_results.runs{i}.time     % Run time (seconds)
 all_results.runs{i}.funcCount % Number of function evaluations
-all_results.global_best_x    % Best solution across all runs
+all_results.global_best_x    % Best solution across all runs (4x1)
 all_results.global_best_fval % Best objective value
 all_results.summary          % Summary statistics
 ```
+
+Use `load_optimization_results.m` to load and visualize results interactively.

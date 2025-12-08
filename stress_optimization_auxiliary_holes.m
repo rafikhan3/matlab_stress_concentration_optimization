@@ -4,10 +4,17 @@
 % in a plate with a central circular hole.
 %
 % FEATURES:
+% - y_aux fixed to 0 (centerline) based on optimization results
 % - Symmetric rotation constraint: theta_L = -theta_R
 % - Parallel multi-start optimization using parfor
 % - Complete history saved for all runs (for post-processing animations)
 % - Comprehensive visualization and comparison
+%
+% DESIGN VARIABLES (4 total):
+% - x_aux: x-position of auxiliary hole center
+% - a: semi-major axis of ellipse
+% - b: semi-minor axis of ellipse
+% - theta_R: rotation angle of right auxiliary hole (theta_L = -theta_R)
 %
 % Author: Generated for Shape Optimization Study
 % Date: December 2024
@@ -20,7 +27,7 @@ clear; close all; clc;
 
 fprintf('=============================================================\n');
 fprintf('  SHAPE OPTIMIZATION: Stress-Relieving Auxiliary Holes\n');
-fprintf('  (Parallel Multi-Start with Symmetric Rotation Constraint)\n');
+fprintf('  (4 Variables: y_aux=0, theta_L=-theta_R)\n');
 fprintf('=============================================================\n\n');
 
 % --- Plate Geometry (Fixed) ---
@@ -61,12 +68,12 @@ params.opt.save_filename = 'optimization_results.mat';  % Results file
 %  SECTION 2: DESIGN VARIABLE BOUNDS
 %  ========================================================================
 
-% Design vector: x = [x_aux, y_aux, a, b, theta_R]
-% Note: theta_L = -theta_R (symmetric constraint enforced internally)
+% Design vector: x = [x_aux, a, b, theta_R]
+% Fixed: y_aux = 0 (auxiliary holes on centerline)
+% Symmetric: theta_L = -theta_R
 
 lb = [
     params.centralHole.radius + params.constraints.max_aux_size + params.constraints.min_gap_central;
-    0;
     params.constraints.min_aux_size;
     params.constraints.min_aux_size;
     -pi/2
@@ -74,18 +81,18 @@ lb = [
 
 ub = [
     params.constraints.max_x_aux;
-    params.plate.width - params.constraints.min_gap_edge - params.constraints.max_aux_size;
     params.constraints.max_aux_size;
     params.constraints.max_aux_size;
     pi/2
 ];
 
-fprintf('Design Variables (5 total, with symmetric rotation):\n');
+fprintf('Design Variables (4 total):\n');
 fprintf('  x_aux:   [%.1f, %.1f] mm\n', lb(1), ub(1));
-fprintf('  y_aux:   [%.1f, %.1f] mm\n', lb(2), ub(2));
-fprintf('  a:       [%.1f, %.1f] mm\n', lb(3), ub(3));
-fprintf('  b:       [%.1f, %.1f] mm\n', lb(4), ub(4));
-fprintf('  theta_R: [%.2f, %.2f] rad (theta_L = -theta_R)\n', lb(5), ub(5));
+fprintf('  a:       [%.1f, %.1f] mm\n', lb(2), ub(2));
+fprintf('  b:       [%.1f, %.1f] mm\n', lb(3), ub(3));
+fprintf('  theta_R: [%.2f, %.2f] rad (theta_L = -theta_R)\n', lb(4), ub(4));
+fprintf('Fixed parameters:\n');
+fprintf('  y_aux:   0 mm (centerline)\n');
 fprintf('\n');
 
 %% ========================================================================
@@ -108,7 +115,7 @@ fprintf('  Computation time: %.2f s\n\n', baseline.time);
 %  ========================================================================
 
 rng(42);  % For reproducibility
-lhs_samples = lhsdesign(params.opt.num_starts, 5);
+lhs_samples = lhsdesign(params.opt.num_starts, 4);
 initial_points = lb' + lhs_samples .* (ub' - lb');
 
 %% ========================================================================
@@ -208,15 +215,15 @@ fprintf('Total function evaluations: %d\n\n', total_feval);
 
 x_opt = run_results{best_idx}.x_opt;
 opt.x_aux = x_opt(1);
-opt.y_aux = x_opt(2);
-opt.a = x_opt(3);
-opt.b = x_opt(4);
-opt.theta_R = x_opt(5);
-opt.theta_L = -x_opt(5);
+opt.y_aux = 0;  % Fixed at centerline
+opt.a = x_opt(2);
+opt.b = x_opt(3);
+opt.theta_R = x_opt(4);
+opt.theta_L = -x_opt(4);
 
 fprintf('=== Optimal Design Variables ===\n');
 fprintf('  x_aux:   %.3f mm\n', opt.x_aux);
-fprintf('  y_aux:   %.3f mm\n', opt.y_aux);
+fprintf('  y_aux:   %.3f mm (fixed at centerline)\n', opt.y_aux);
 fprintf('  a:       %.3f mm\n', opt.a);
 fprintf('  b:       %.3f mm\n', opt.b);
 fprintf('  theta_R: %.3f rad (%.1f deg)\n', opt.theta_R, rad2deg(opt.theta_R));
@@ -226,13 +233,11 @@ fprintf('\n');
 % Verify constraints
 [c_opt, ~] = compute_constraints(x_opt, params);
 fprintf('Constraint Values at Optimum (should all be <= 0):\n');
-constraint_names = {'g1: Right hole-central clearance', ...
-                    'g2: Left hole-central clearance', ...
-                    'g3: Right hole-right edge', ...
-                    'g4: Left hole-left edge', ...
-                    'g5: Right hole-top/bottom edge', ...
-                    'g6: Left hole-top/bottom edge', ...
-                    'g7: Aspect ratio'};
+constraint_names = {'g1: Hole-central clearance', ...
+                    'g2: (same as g1, symmetric)', ...
+                    'g3: Hole-right edge', ...
+                    'g4: Hole-top/bottom edge', ...
+                    'g5: Aspect ratio'};
 for j = 1:length(c_opt)
     status = 'OK';
     if c_opt(j) > 1e-6
@@ -248,12 +253,13 @@ fprintf('\n');
 
 fprintf('=== Running Final Detailed Analysis ===\n');
 
-x_opt_full = [x_opt(1:4); x_opt(5); -x_opt(5)];
+% Expand 4-var x_opt to 6-var format: [x_aux, y_aux=0, a, b, theta_R, theta_L]
+x_opt_full = [x_opt(1); 0; x_opt(2); x_opt(3); x_opt(4); -x_opt(4)];
 optimal_result = run_detailed_analysis(x_opt_full, params);
 
 % Initial guess analysis
 x0_best = run_results{best_idx}.x0;
-x0_full = [x0_best(1:4); x0_best(5); -x0_best(5)];
+x0_full = [x0_best(1); 0; x0_best(2); x0_best(3); x0_best(4); -x0_best(4)];
 initial_result = run_analysis_with_aux_holes(x0_full, params);
 
 %% ========================================================================
@@ -336,8 +342,8 @@ subplot(1, 3, 2);
 [g_init, ~] = create_geometry(x0_full, params);
 pdegplot(g_init, 'FaceLabels', 'off');
 hold on;
-plot(x0_best(1), x0_best(2), 'ro', 'MarkerSize', 8, 'LineWidth', 2);
-plot(-x0_best(1), x0_best(2), 'bo', 'MarkerSize', 8, 'LineWidth', 2);
+plot(x0_best(1), 0, 'ro', 'MarkerSize', 8, 'LineWidth', 2);  % y_aux = 0
+plot(-x0_best(1), 0, 'bo', 'MarkerSize', 8, 'LineWidth', 2);  % y_aux = 0
 hold off;
 axis equal;
 axis([-1.1*params.plate.length, 1.1*params.plate.length, -1.1*params.plate.width, 1.1*params.plate.width]);
@@ -565,12 +571,13 @@ fprintf('=============================================================\n');
 fprintf('                    OPTIMIZATION SUMMARY\n');
 fprintf('=============================================================\n');
 fprintf('\n');
-fprintf('OPTIMAL DESIGN (with symmetric rotation theta_L = -theta_R):\n');
-fprintf('  Auxiliary hole position:  (%.2f, %.2f) mm from center\n', opt.x_aux, opt.y_aux);
-fprintf('  Ellipse semi-axes:        a = %.2f mm, b = %.2f mm\n', opt.a, opt.b);
-fprintf('  Aspect ratio:             %.2f\n', opt.a/opt.b);
-fprintf('  Right hole rotation:      %.1f degrees\n', rad2deg(opt.theta_R));
-fprintf('  Left hole rotation:       %.1f degrees (symmetric)\n', rad2deg(opt.theta_L));
+fprintf('OPTIMAL DESIGN (4 variables: y_aux=0, theta_L=-theta_R):\n');
+fprintf('  Auxiliary hole x-position: %.2f mm from center\n', opt.x_aux);
+fprintf('  Auxiliary hole y-position: %.2f mm (fixed at centerline)\n', opt.y_aux);
+fprintf('  Ellipse semi-axes:         a = %.2f mm, b = %.2f mm\n', opt.a, opt.b);
+fprintf('  Aspect ratio:              %.2f\n', opt.a/opt.b);
+fprintf('  Right hole rotation:       %.1f degrees\n', rad2deg(opt.theta_R));
+fprintf('  Left hole rotation:        %.1f degrees (symmetric)\n', rad2deg(opt.theta_L));
 fprintf('\n');
 fprintf('PERFORMANCE:\n');
 fprintf('  Baseline max stress:      %.2f MPa (Kt = %.3f)\n', baseline.max_stress, baseline.Kt);
@@ -612,14 +619,15 @@ function result = run_single_optimization(run_idx, x0, lb, ub, options, params)
     [c0, ~] = compute_constraints(x0, params);
     if any(c0 > 0)
         x0 = (lb + ub) / 2;
-        x0(5) = 0;
+        x0(4) = 0;  % theta_R = 0 as safe default
     end
 
     % Create objective and constraint function handles
     history = struct('fval', [], 'x', []);
 
     function f = obj_with_history(x)
-        x_full = [x(1:4); x(5); -x(5)];
+        % Expand 4-var to 6-var: [x_aux, y_aux=0, a, b, theta_R, theta_L=-theta_R]
+        x_full = [x(1); 0; x(2); x(3); x(4); -x(4)];
         try
             res = run_analysis_with_aux_holes(x_full, params);
             f = res.max_stress;
@@ -656,12 +664,14 @@ end
 
 function [c, ceq] = compute_constraints(x, params)
 %COMPUTE_CONSTRAINTS Compute nonlinear inequality constraints
+%   x = [x_aux, a, b, theta_R] (4 variables)
+%   y_aux = 0 (fixed), theta_L = -theta_R (symmetric)
 
     x_aux = x(1);
-    y_aux = x(2);
-    a = x(3);
-    b = x(4);
-    theta_R = x(5);
+    y_aux = 0;  % Fixed at centerline
+    a = x(2);
+    b = x(3);
+    theta_R = x(4);
     theta_L = -theta_R;
 
     R_c = params.centralHole.radius;
@@ -678,16 +688,14 @@ function [c, ceq] = compute_constraints(x, params)
 
     e_max_R = max(ex_R, ey_R);
     e_max_L = max(ex_L, ey_L);
-    d_c = sqrt(x_aux^2 + y_aux^2);
+    d_c = x_aux;  % Since y_aux = 0, distance is simply x_aux
 
-    c = zeros(7, 1);
-    c(1) = R_c + e_max_R + delta_c - d_c;
-    c(2) = R_c + e_max_L + delta_c - d_c;
-    c(3) = (x_aux + ex_R) - (L - delta_e);
-    c(4) = (x_aux + ex_L) - (L - delta_e);
-    c(5) = (abs(y_aux) + ey_R) - (W - delta_e);
-    c(6) = (abs(y_aux) + ey_L) - (W - delta_e);
-    c(7) = a - alpha_max * b;
+    c = zeros(5, 1);  % Reduced from 7 to 5 (y constraints are trivially satisfied with y_aux=0)
+    c(1) = R_c + e_max_R + delta_c - d_c;  % Right hole-central clearance
+    c(2) = R_c + e_max_L + delta_c - d_c;  % Left hole-central clearance (same as c(1))
+    c(3) = (x_aux + ex_R) - (L - delta_e);  % Right hole-right edge
+    c(4) = ey_R - (W - delta_e);  % Right hole-top/bottom edge (y_aux = 0)
+    c(5) = a - alpha_max * b;  % Aspect ratio
 
     ceq = [];
 end
@@ -848,6 +856,7 @@ end
 
 function animate_single_run(run_result, params, baseline)
 %ANIMATE_SINGLE_RUN Create animation from a single optimization run
+%   x = [x_aux, a, b, theta_R] (4 variables), y_aux = 0
 
     history = run_result.history;
     if isempty(history.x) || size(history.x, 1) < 2
@@ -865,7 +874,8 @@ function animate_single_run(run_result, params, baseline)
         x_frame = history.x(idx, :)';
         fval_frame = history.fval(idx);
 
-        x_full = [x_frame(1:4); x_frame(5); -x_frame(5)];
+        % Expand 4-var to 6-var: [x_aux, y_aux=0, a, b, theta_R, theta_L]
+        x_full = [x_frame(1); 0; x_frame(2); x_frame(3); x_frame(4); -x_frame(4)];
 
         clf(fig);
 
@@ -874,8 +884,8 @@ function animate_single_run(run_result, params, baseline)
             [g_frame, ~] = create_geometry(x_full, params);
             pdegplot(g_frame, 'FaceLabels', 'off');
             hold on;
-            plot(x_frame(1), x_frame(2), 'ro', 'MarkerSize', 8, 'LineWidth', 2);
-            plot(-x_frame(1), x_frame(2), 'bo', 'MarkerSize', 8, 'LineWidth', 2);
+            plot(x_frame(1), 0, 'ro', 'MarkerSize', 8, 'LineWidth', 2);  % y_aux = 0
+            plot(-x_frame(1), 0, 'bo', 'MarkerSize', 8, 'LineWidth', 2);  % y_aux = 0
             hold off;
         catch
             text(0.5, 0.5, 'Geometry failed', 'HorizontalAlignment', 'center');
