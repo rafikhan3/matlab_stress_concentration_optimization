@@ -30,7 +30,7 @@ auxHole.y_center = 0.0;                % y-offset from centerline (mm)
 
 % Shape: ellipse semi-axes
 auxHole.a = 8.0;                       % Semi-major axis (mm)
-auxHole.b = 5.0;                       % Semi-minor axis (mm)
+auxHole.b = 6.0;                       % Semi-minor axis (mm)
 
 % Rotation: independent angles for left and right holes
 auxHole.theta_right = deg2rad(30);     % Rotation angle for RIGHT aux hole (rad, CCW positive)
@@ -46,12 +46,13 @@ load.tension = 100;                    % Applied tensile stress (MPa)
 % --- Constraint Parameters ---
 constraints.min_gap_central = 3.0;     % Minimum gap from central hole (mm)
 constraints.min_gap_edge = 5.0;        % Minimum gap from plate edges (mm)
-constraints.min_aux_size = 2.0;        % Minimum semi-axis size (mm)
+constraints.min_aux_size = 6.0;        % Minimum semi-axis size (mm)
 constraints.max_aux_size = 15.0;       % Maximum semi-axis size (mm)
 constraints.max_aspect_ratio = 3.0;    % Maximum a/b ratio
+constraints.max_x_aux = 0.75 * plate.length;  % Maximum x-position for aux hole center (mm)
 
 % --- Mesh Parameters ---
-mesh.Hmax_factor = 6;                  % Hmax = min_feature / Hmax_factor
+mesh.Hmax_factor = 2;                  % Hmax = min_feature / Hmax_factor (2 for quick, 6 for fine)
 
 %% ========================================================================
 %  SECTION 2: CONSTRAINT VALIDATION FUNCTIONS
