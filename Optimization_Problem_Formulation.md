@@ -107,8 +107,10 @@ $$
 
 ### 4.2 Design Variables
 
-**Design Vector:**
-$$\mathbf{x} = [x_{aux}, \, y_{aux}, \, a, \, b, \, \theta_R, \, \theta_L]^T \in \mathbb{R}^6$$
+**Design Vector (with Symmetric Rotation Constraint):**
+$$\mathbf{x} = [x_{aux}, \, y_{aux}, \, a, \, b, \, \theta_R]^T \in \mathbb{R}^5$$
+
+**Note:** The left hole rotation is computed as $\theta_L = -\theta_R$ to enforce symmetry for reverse loading conditions.
 
 | Index | Variable | Symbol | Description | Units |
 |-------|----------|--------|-------------|-------|
@@ -117,7 +119,7 @@ $$\mathbf{x} = [x_{aux}, \, y_{aux}, \, a, \, b, \, \theta_R, \, \theta_L]^T \in
 | 3 | $x_3$ | $a$ | Semi-major axis of ellipse | mm |
 | 4 | $x_4$ | $b$ | Semi-minor axis of ellipse | mm |
 | 5 | $x_5$ | $\theta_R$ | Rotation angle of right auxiliary hole | rad |
-| 6 | $x_6$ | $\theta_L$ | Rotation angle of left auxiliary hole | rad |
+| - | (derived) | $\theta_L$ | $= -\theta_R$ (symmetric constraint) | rad |
 
 ### 4.3 Objective Function
 
@@ -143,7 +145,8 @@ $$\mathbf{x}^L \leq \mathbf{x} \leq \mathbf{x}^U$$
 | $a$ | $6$ mm | $15$ mm | Manufacturability limits |
 | $b$ | $6$ mm | $15$ mm | Manufacturability limits |
 | $\theta_R$ | $-\pi/2$ rad | $+\pi/2$ rad | Full rotation range |
-| $\theta_L$ | $-\pi/2$ rad | $+\pi/2$ rad | Full rotation range |
+
+**Note:** $\theta_L = -\theta_R$ is enforced internally (symmetric rotation constraint).
 
 **Derived Constants:**
 - $\delta_c = 3$ mm (minimum gap from central hole)
@@ -401,15 +404,17 @@ end
 ### A.1 Design Variable Bounds (Numerical)
 
 ```matlab
-lb = [38, 0, 6, 6, -pi/2, -pi/2];   % Lower bounds
-ub = [150, 30, 15, 15, pi/2, pi/2]; % Upper bounds
+lb = [38, 0, 6, 6, -pi/2];    % Lower bounds (5 variables)
+ub = [150, 30, 15, 15, pi/2]; % Upper bounds (5 variables)
+% Note: theta_L = -theta_R (symmetric constraint enforced internally)
 ```
 
 ### A.2 Constraint Function Signature
 
 ```matlab
 function [c, ceq] = nonlcon(x)
-    % x = [x_aux, y_aux, a, b, theta_R, theta_L]
+    % x = [x_aux, y_aux, a, b, theta_R] (5 variables)
+    % theta_L = -theta_R (computed internally)
     % c: inequality constraints (7x1), c <= 0 for feasible
     % ceq: equality constraints (empty)
 end
@@ -419,7 +424,24 @@ end
 
 ```matlab
 function f = objective(x)
-    % x = [x_aux, y_aux, a, b, theta_R, theta_L]
+    % x = [x_aux, y_aux, a, b, theta_R] (5 variables)
+    % theta_L = -theta_R (computed internally)
     % f: maximum von Mises stress (scalar)
 end
+```
+
+### A.4 Results File Structure
+
+The optimization saves results to `optimization_results.mat`:
+```matlab
+all_results.runs{i}          % Results from each multi-start run
+all_results.runs{i}.x0       % Initial point
+all_results.runs{i}.x_opt    % Optimal point
+all_results.runs{i}.fval     % Optimal objective value
+all_results.runs{i}.history  % Convergence history (fval, x per iteration)
+all_results.runs{i}.time     % Run time (seconds)
+all_results.runs{i}.funcCount % Number of function evaluations
+all_results.global_best_x    % Best solution across all runs
+all_results.global_best_fval % Best objective value
+all_results.summary          % Summary statistics
 ```
