@@ -140,7 +140,7 @@ Some might argue that during optimization, elliptical holes will simply converge
 
 ### 4.1 Design Variables
 
-For **two symmetric elliptical auxiliary holes** (exploiting symmetry about the x-axis):
+For **two elliptical auxiliary holes** with positional symmetry but **independent rotation angles**:
 
 | Variable | Symbol | Description | Units |
 |----------|--------|-------------|-------|
@@ -148,17 +148,22 @@ For **two symmetric elliptical auxiliary holes** (exploiting symmetry about the 
 | y-position | `y_aux` | Vertical offset from centerline | mm |
 | Semi-major axis | `a` | Larger semi-axis of ellipse | mm |
 | Semi-minor axis | `b` | Smaller semi-axis of ellipse | mm |
-| Rotation angle | `theta` | CCW rotation from horizontal | radians |
+| Right hole rotation | `theta_right` | CCW rotation for right auxiliary hole | radians |
+| Left hole rotation | `theta_left` | CCW rotation for left auxiliary hole | radians |
 
 **Note on Symmetry:**
-- The left auxiliary hole is a mirror of the right one about the y-axis
-- This reduces the design space from 10 variables (5 per hole) to 5 variables
-- The x-position for the left hole is `-x_aux`
+- **Positional symmetry** is maintained: the left hole center is at `(-x_aux, y_aux)`
+- **Shape symmetry** is maintained: both holes share the same semi-axes `a` and `b`
+- **Rotational independence**: each hole has its own rotation angle, allowing asymmetric orientations
+- This reduces the design space from 10 variables (5 per hole) to **6 variables**
 
 **Design Vector:**
 ```
-X = [x_aux, y_aux, a, b, theta]
+X = [x_aux, y_aux, a, b, theta_right, theta_left]
 ```
+
+**Rationale for Independent Rotations:**
+The stress field around the central hole is symmetric about the x-axis but the optimal ellipse orientation to intercept stress trajectories may differ on each side. Allowing independent rotations enables the optimizer to find configurations where the ellipses "lean" toward or away from the stress flow differently on each side.
 
 ### 4.2 Objective Function
 
@@ -190,7 +195,7 @@ end
 
 1. **Non-overlapping with central hole:**
    - The auxiliary hole boundary must not intersect the central hole
-   - Include a minimum gap for mesh quality: `gap_min >= 2 mm`
+   - Include a minimum gap for mesh quality: `gap_min >= 3 mm`
 
 2. **Contained within plate:**
    - Auxiliary holes must lie entirely within the plate boundaries
@@ -217,35 +222,60 @@ end
 | `y_aux` | `0` | `totalWidth - edge_clearance - b_max` | Symmetric; don't exceed plate boundary |
 | `a` | `2.0 mm` | `15.0 mm` | Manufacturability and material limits |
 | `b` | `2.0 mm` | `15.0 mm` | Manufacturability and material limits |
-| `theta` | `-pi/2` | `pi/2` | Full rotation coverage |
+| `theta_right` | `-pi/2` | `pi/2` | Full rotation coverage |
+| `theta_left` | `-pi/2` | `pi/2` | Full rotation coverage |
 
-### 4.4 Constraint Functions
+### 4.4 Constraint Functions for Rotated Ellipses
+
+**Key Challenge:** Computing clearances for rotated ellipses requires finding the axis-aligned bounding box (AABB) of each ellipse. For a rotated ellipse with semi-axes `a`, `b` and rotation angle `theta`, the AABB half-extents are:
+
+$$x_{extent} = \sqrt{a^2 \cos^2(\theta) + b^2 \sin^2(\theta)}$$
+$$y_{extent} = \sqrt{a^2 \sin^2(\theta) + b^2 \cos^2(\theta)}$$
+
+These formulas give the maximum x and y distances from the ellipse center to its boundary, accounting for rotation.
 
 **Nonlinear Inequality Constraints:** `c(X) <= 0`
 
 ```matlab
 function [c, ceq] = constraints(X)
-    x_aux = X(1); y_aux = X(2); a = X(3); b = X(4); theta = X(5);
+    x_aux = X(1); y_aux = X(2); a = X(3); b = X(4);
+    theta_right = X(5); theta_left = X(6);
 
-    % Central hole clearance (approximate using bounding circle)
-    r_bounding = max(a, b);  % Conservative bounding radius
+    % Compute axis-aligned bounding box extents for each hole
+    x_ext_right = sqrt(a^2*cos(theta_right)^2 + b^2*sin(theta_right)^2);
+    y_ext_right = sqrt(a^2*sin(theta_right)^2 + b^2*cos(theta_right)^2);
+
+    x_ext_left = sqrt(a^2*cos(theta_left)^2 + b^2*sin(theta_left)^2);
+    y_ext_left = sqrt(a^2*sin(theta_left)^2 + b^2*cos(theta_left)^2);
+
+    % Use max extent for conservative central hole clearance
+    max_ext_right = max(x_ext_right, y_ext_right);
+    max_ext_left = max(x_ext_left, y_ext_left);
+
+    % Constraint 1 & 2: Central hole clearance
     dist_to_center = sqrt(x_aux^2 + y_aux^2);
-    c(1) = (radius + r_bounding + gap_min) - dist_to_center;
+    c(1) = (radius + max_ext_right + gap_min) - dist_to_center;  % Right hole
+    c(2) = (radius + max_ext_left + gap_min) - dist_to_center;   % Left hole
 
-    % Plate boundary constraints (check ellipse extremes)
-    % Right boundary
-    c(2) = (x_aux + a*cos(theta)) - (totalLength - edge_clearance);
+    % Constraint 3: Right boundary clearance (right hole)
+    c(3) = (x_aux + x_ext_right) - (totalLength - edge_clearance);
 
-    % Top boundary
-    c(3) = (y_aux + max(a*sin(theta), b*cos(theta))) - (totalWidth - edge_clearance);
+    % Constraint 4: Left boundary clearance (left hole)
+    c(4) = (x_aux + x_ext_left) - (totalLength - edge_clearance);
 
-    % Left auxiliary hole clearance from right one (if needed)
-    % ... additional constraints
+    % Constraint 5 & 6: Top boundary clearance
+    c(5) = (abs(y_aux) + y_ext_right) - (totalWidth - edge_clearance);
+    c(6) = (abs(y_aux) + y_ext_left) - (totalWidth - edge_clearance);
+
+    % Constraint 7: Aspect ratio (handled via bounds or explicit constraint)
+    c(7) = a - constraints.max_aspect_ratio * b;
 
     % No equality constraints
     ceq = [];
 end
 ```
+
+**Important Implementation Note:** The bounding box approach is conservative—it may reject some feasible designs. For higher fidelity, one could sample points on the ellipse boundary and check exact distances, but the AABB method provides a good balance of accuracy and computational efficiency.
 
 ---
 
@@ -268,8 +298,8 @@ MATLAB's `fmincon` is chosen for this problem because:
 options = optimoptions('fmincon', ...
     'Algorithm', 'sqp', ...              % Good for engineering problems
     'Display', 'iter', ...               % Show progress
-    'MaxIterations', 200, ...            % Sufficient for 5 variables
-    'MaxFunctionEvaluations', 1000, ...  % Allow thorough search
+    'MaxIterations', 200, ...            % Sufficient for 6 variables
+    'MaxFunctionEvaluations', 1200, ...  % Allow thorough search
     'OptimalityTolerance', 1e-4, ...     % Reasonable for stress values
     'StepTolerance', 1e-4, ...           % Relative to variable scales
     'ConstraintTolerance', 1e-4, ...     % Geometric precision
@@ -430,8 +460,8 @@ Based on literature and physical intuition:
 | Aspect | Specification |
 |--------|---------------|
 | **Objective** | Minimize maximum von Mises stress |
-| **Design Variables** | 5 (position, size, orientation of elliptical auxiliary holes) |
-| **Constraints** | Geometric feasibility (no overlap, within plate) |
+| **Design Variables** | 6 (position, size, independent orientations of elliptical auxiliary holes) |
+| **Constraints** | Geometric feasibility (no overlap, within plate, clearance from edges) |
 | **Solver** | fmincon with SQP algorithm |
 | **Strategy** | Multi-start for global exploration |
 
@@ -439,7 +469,7 @@ Based on literature and physical intuition:
 
 1. **Use elliptical auxiliary holes** - Greater design freedom leads to better solutions; circular is a special case that can emerge naturally.
 
-2. **Exploit symmetry** - Reduce from 10 to 5 design variables by assuming symmetric placement about the x-axis.
+2. **Exploit partial symmetry** - Reduce from 10 to 6 design variables by assuming positional and shape symmetry, while allowing independent rotation angles.
 
 3. **Implement robust geometry handling** - Use try-catch and penalty functions for infeasible configurations.
 
