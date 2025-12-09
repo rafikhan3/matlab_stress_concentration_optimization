@@ -98,13 +98,12 @@ function display_summary(all_results)
 
     % Optimal design (4 variables: x_aux, a, b, theta_R)
     x_opt = all_results.global_best_x;
-    fprintf('OPTIMAL DESIGN (4 variables: y_aux=0, theta_L=-theta_R):\n');
+    fprintf('OPTIMAL DESIGN (4 variables: y_aux=0, mirror symmetric):\n');
     fprintf('  x_aux:   %.3f mm\n', x_opt(1));
     fprintf('  y_aux:   0 mm (fixed at centerline)\n');
     fprintf('  a:       %.3f mm\n', x_opt(2));
     fprintf('  b:       %.3f mm\n', x_opt(3));
-    fprintf('  theta_R: %.3f rad (%.1f deg)\n', x_opt(4), rad2deg(x_opt(4)));
-    fprintf('  theta_L: %.3f rad (%.1f deg) [= -theta_R]\n', -x_opt(4), rad2deg(-x_opt(4)));
+    fprintf('  theta:   %.3f rad (%.1f deg) [both holes, visually mirrored]\n', x_opt(4), rad2deg(x_opt(4)));
     fprintf('  Aspect ratio: %.2f\n', x_opt(2)/x_opt(3));
     fprintf('\n');
 
@@ -147,7 +146,7 @@ function regenerate_plots(all_results)
     x_opt = all_results.global_best_x;
 
     % Expand optimal design to 6-var format
-    x_opt_full = [x_opt(1); 0; x_opt(2); x_opt(3); x_opt(4); -x_opt(4)];
+    x_opt_full = [x_opt(1); 0; x_opt(2); x_opt(3); x_opt(4); x_opt(4)];
 
     % --- Figure 1: Geometry Comparison ---
     figure('Name', 'Geometry Comparison', 'Position', [50, 50, 1400, 500]);
@@ -164,7 +163,7 @@ function regenerate_plots(all_results)
 
     % Initial guess from best run
     x0_best = all_results.runs{all_results.global_best_idx}.x0;
-    x0_full = [x0_best(1); 0; x0_best(2); x0_best(3); x0_best(4); -x0_best(4)];
+    x0_full = [x0_best(1); 0; x0_best(2); x0_best(3); x0_best(4); x0_best(4)];
 
     subplot(1, 3, 2);
     try
@@ -312,8 +311,8 @@ function animate_run(all_results, run_idx)
         x_frame = history.x(idx, :)';
         fval_frame = history.fval(idx);
 
-        % Expand 4-var to 6-var: [x_aux, y_aux=0, a, b, theta_R, theta_L]
-        x_full = [x_frame(1); 0; x_frame(2); x_frame(3); x_frame(4); -x_frame(4)];
+        % Expand 4-var to 6-var: [x_aux, y_aux=0, a, b, theta_R, theta_L=theta_R]
+        x_full = [x_frame(1); 0; x_frame(2); x_frame(3); x_frame(4); x_frame(4)];
 
         clf(fig);
 
@@ -409,7 +408,7 @@ function export_optimal_design(all_results)
     fprintf(fid, '  a       = %.4f mm (semi-major axis)\n', x_opt(2));
     fprintf(fid, '  b       = %.4f mm (semi-minor axis)\n', x_opt(3));
     fprintf(fid, '  theta_R = %.4f rad = %.2f deg\n', x_opt(4), rad2deg(x_opt(4)));
-    fprintf(fid, '  theta_L = %.4f rad = %.2f deg (= -theta_R)\n\n', -x_opt(4), rad2deg(-x_opt(4)));
+    fprintf(fid, '  theta_L = %.4f rad = %.2f deg (= theta_R, visually mirrored)\n\n', x_opt(4), rad2deg(x_opt(4)));
 
     fprintf(fid, 'DERIVED QUANTITIES:\n');
     fprintf(fid, '  Aspect ratio (a/b): %.3f\n', x_opt(2)/x_opt(3));
@@ -440,7 +439,7 @@ function rerun_stress_analysis(all_results)
     x_opt = all_results.global_best_x;
 
     % Expand to 6-var format
-    x_opt_full = [x_opt(1); 0; x_opt(2); x_opt(3); x_opt(4); -x_opt(4)];
+    x_opt_full = [x_opt(1); 0; x_opt(2); x_opt(3); x_opt(4); x_opt(4)];
 
     % Run analysis
     result = run_detailed_analysis_internal(x_opt_full, params);

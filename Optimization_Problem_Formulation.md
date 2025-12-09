@@ -112,7 +112,7 @@ $$\mathbf{x} = [x_{aux}, \, a, \, b, \, \theta_R]^T \in \mathbb{R}^4$$
 
 **Fixed Parameters:**
 - $y_{aux} = 0$ (auxiliary holes on centerline): Based on optimization results showing convergence to centerline
-- $\theta_L = -\theta_R$ (symmetric rotation): Enforces symmetry for reverse loading conditions
+- $\theta_L = \theta_R$ (same rotation angle): Visual mirror symmetry achieved via x-negation in geometry formula
 
 | Index | Variable | Symbol | Description | Units |
 |-------|----------|--------|-------------|-------|
@@ -121,7 +121,7 @@ $$\mathbf{x} = [x_{aux}, \, a, \, b, \, \theta_R]^T \in \mathbb{R}^4$$
 | 3 | $x_3$ | $b$ | Semi-minor axis of ellipse | mm |
 | 4 | $x_4$ | $\theta_R$ | Rotation angle of right auxiliary hole | rad |
 | - | (fixed) | $y_{aux}$ | $= 0$ (centerline) | mm |
-| - | (derived) | $\theta_L$ | $= -\theta_R$ (symmetric constraint) | rad |
+| - | (derived) | $\theta_L$ | $= \theta_R$ (mirror via geometry) | rad |
 
 ### 4.3 Objective Function
 
@@ -149,7 +149,7 @@ $$\mathbf{x}^L \leq \mathbf{x} \leq \mathbf{x}^U$$
 
 **Fixed Parameters (not optimized):**
 - $y_{aux} = 0$ (auxiliary holes on centerline)
-- $\theta_L = -\theta_R$ (symmetric rotation constraint)
+- $\theta_L = \theta_R$ (same angle; mirror symmetry via x-negation in geometry)
 
 **Derived Constants:**
 - $\delta_c = 3$ mm (minimum gap from central hole)
@@ -183,7 +183,7 @@ The auxiliary holes must maintain minimum clearance from the central hole.
 $$g_1(\mathbf{x}) = R_c + e_{max}(\theta_R) + \delta_c - x_{aux} \leq 0$$
 $$g_2(\mathbf{x}) = R_c + e_{max}(\theta_L) + \delta_c - x_{aux} \leq 0$$
 
-*Note:* With symmetric rotation ($\theta_L = -\theta_R$), $g_1 = g_2$ due to symmetry of extent function.
+*Note:* With $\theta_L = \theta_R$, $g_1 = g_2$ due to symmetry of extent function.
 
 *Physical meaning:* Distance from ellipse boundary to central hole boundary must exceed $\delta_c$.
 
@@ -414,7 +414,7 @@ end
 lb = [38, 6, 6, -pi/2];    % Lower bounds (4 variables)
 ub = [150, 15, 15, pi/2];  % Upper bounds (4 variables)
 % Fixed: y_aux = 0 (centerline)
-% Derived: theta_L = -theta_R (symmetric rotation)
+% Derived: theta_L = theta_R (mirror symmetry via x-negation in geometry)
 ```
 
 ### A.2 Constraint Function Signature
@@ -423,7 +423,7 @@ ub = [150, 15, 15, pi/2];  % Upper bounds (4 variables)
 function [c, ceq] = nonlcon(x)
     % x = [x_aux, a, b, theta_R] (4 variables)
     % y_aux = 0 (fixed)
-    % theta_L = -theta_R (derived)
+    % theta_L = theta_R (mirror via geometry)
     % c: inequality constraints (5x1), c <= 0 for feasible
     % ceq: equality constraints (empty)
 end
@@ -434,7 +434,7 @@ end
 ```matlab
 function f = objective(x)
     % x = [x_aux, a, b, theta_R] (4 variables)
-    % y_aux = 0 (fixed), theta_L = -theta_R (derived)
+    % y_aux = 0 (fixed), theta_L = theta_R (mirror via geometry)
     % f: maximum von Mises stress (scalar)
 end
 ```
