@@ -48,10 +48,11 @@ while true
     fprintf('5. Compare all runs\n');
     fprintf('6. Export optimal design parameters\n');
     fprintf('7. Re-run stress analysis on optimal design\n');
+    fprintf('8. Save animation as GIF\n');
     fprintf('0. Exit\n');
     fprintf('\n');
 
-    choice = input('Enter choice (0-7): ');
+    choice = input('Enter choice (0-8): ');
 
     switch choice
         case 0
@@ -77,8 +78,19 @@ while true
             export_optimal_design(all_results);
         case 7
             rerun_stress_analysis(all_results);
+        case 8
+            fprintf('Available runs: 1 to %d (best run: %d)\n', length(all_results.runs), all_results.global_best_idx);
+            run_idx = input('Enter run index to save as GIF (0 for best): ');
+            if run_idx == 0
+                run_idx = all_results.global_best_idx;
+            end
+            if run_idx >= 1 && run_idx <= length(all_results.runs)
+                save_animation_gif(all_results, run_idx);
+            else
+                fprintf('Invalid run index.\n');
+            end
         otherwise
-            fprintf('Invalid choice. Please enter 0-7.\n');
+            fprintf('Invalid choice. Please enter 0-8.\n');
     end
 end
 
@@ -360,6 +372,107 @@ function animate_run(all_results, run_idx)
     end
 
     fprintf('Animation complete.\n');
+end
+
+function save_animation_gif(all_results, run_idx)
+%SAVE_ANIMATION_GIF Save optimization run animation as GIF file
+
+    if run_idx < 1 || run_idx > length(all_results.runs)
+        fprintf('Invalid run index: %d\n', run_idx);
+        return;
+    end
+
+    run_result = all_results.runs{run_idx};
+    params = all_results.params;
+    baseline = all_results.baseline;
+
+    history = run_result.history;
+    if isempty(history.x) || size(history.x, 1) < 2
+        fprintf('Insufficient history for animation in run %d.\n', run_idx);
+        return;
+    end
+
+    % GIF settings
+    gif_filename = sprintf('optimization_animation_run%d.gif', run_idx);
+    delay_time = 0.2;  % seconds between frames
+    n_frames = min(40, size(history.x, 1));
+    frame_indices = round(linspace(1, size(history.x, 1), n_frames));
+
+    fprintf('Saving animation to %s (%d frames)...\n', gif_filename, n_frames);
+
+    fig = figure('Name', sprintf('Design Evolution - Run %d', run_idx), ...
+                 'Position', [50, 50, 1200, 500], 'Color', 'white');
+
+    for frame = 1:length(frame_indices)
+        idx = frame_indices(frame);
+        x_frame = history.x(idx, :)';
+        fval_frame = history.fval(idx);
+
+        % Expand 4-var to 6-var
+        x_full = [x_frame(1); 0; x_frame(2); x_frame(3); x_frame(4); x_frame(4)];
+
+        clf(fig);
+
+        % Left subplot: Geometry
+        subplot(1, 2, 1);
+        try
+            [g_frame, ~] = create_geometry(x_full, params);
+            pdegplot(g_frame, 'FaceLabels', 'off');
+            hold on;
+            plot(x_frame(1), 0, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
+            plot(-x_frame(1), 0, 'bo', 'MarkerSize', 8, 'LineWidth', 2);
+            hold off;
+        catch
+            text(0.5, 0.5, 'Geometry failed', 'HorizontalAlignment', 'center');
+        end
+        axis equal;
+        axis([-1.1*params.plate.length, 1.1*params.plate.length, ...
+              -1.1*params.plate.width, 1.1*params.plate.width]);
+        xlabel('x (mm)'); ylabel('y (mm)');
+        title(sprintf('Design at Iteration %d', idx));
+        grid on;
+
+        % Display current design variables
+        text(-params.plate.length*0.9, -params.plate.width*0.8, ...
+             sprintf('x_{aux}=%.1f, a=%.1f, b=%.1f, \\theta=%.1f°', ...
+                     x_frame(1), x_frame(2), x_frame(3), rad2deg(x_frame(4))), ...
+             'FontSize', 9);
+
+        % Right subplot: Convergence
+        subplot(1, 2, 2);
+        plot(1:idx, history.fval(1:idx), 'b-o', 'LineWidth', 1.5, 'MarkerSize', 3);
+        hold on;
+        yline(baseline.max_stress, 'r--', 'LineWidth', 1.5);
+        plot(idx, fval_frame, 'go', 'MarkerSize', 10, 'LineWidth', 2);
+        hold off;
+        xlabel('Function Evaluation');
+        ylabel('Max von Mises Stress (MPa)');
+        title(sprintf('\\sigma_{max} = %.1f MPa', fval_frame));
+        xlim([0, size(history.x, 1) + 1]);
+        ylim([min(history.fval)*0.95, max([max(history.fval), baseline.max_stress])*1.05]);
+        legend('Objective', 'Baseline', 'Current', 'Location', 'northeast');
+        grid on;
+
+        sgtitle(sprintf('Run %d - Frame %d/%d', run_idx, frame, n_frames));
+        drawnow;
+
+        % Capture frame for GIF
+        frame_data = getframe(fig);
+        im = frame2im(frame_data);
+        [imind, cm] = rgb2ind(im, 256);
+
+        % Write to GIF
+        if frame == 1
+            imwrite(imind, cm, gif_filename, 'gif', 'Loopcount', inf, 'DelayTime', delay_time);
+        else
+            imwrite(imind, cm, gif_filename, 'gif', 'WriteMode', 'append', 'DelayTime', delay_time);
+        end
+
+        fprintf('  Frame %d/%d saved\n', frame, n_frames);
+    end
+
+    close(fig);
+    fprintf('Animation saved to: %s\n', gif_filename);
 end
 
 function compare_all_runs(all_results)
