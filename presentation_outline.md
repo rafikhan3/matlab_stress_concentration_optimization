@@ -103,27 +103,35 @@ Design vector: **x** = [x_aux, a, b, θ]ᵀ ∈ ℝ⁴
 
 **Title:** Optimization Problem Formulation
 
-**Content - Canonical Form:**
-```
-minimize    f(x) = max σ_vM(x,y; x)
-   x        over domain Ω
+**Content - Canonical Form (Symbolic):**
+$$
+\begin{aligned}
+\min_{\mathbf{x}} \quad & f(\mathbf{x}) = \max_{(x,y) \in \Omega} \sigma_{vM}(x, y; \mathbf{x}) \\
+\text{subject to} \quad & g_i(\mathbf{x}) \leq 0, \quad i = 1, \ldots, 5 \\
+& \mathbf{x}^L \leq \mathbf{x} \leq \mathbf{x}^U
+\end{aligned}
+$$
 
-subject to  g₁: Central hole clearance ≤ 0
-            g₂: Edge clearance (x) ≤ 0
-            g₃: Edge clearance (y) ≤ 0
-            g₄: Aspect ratio ≤ 0
-            x^L ≤ x ≤ x^U
-```
+**Constraints in Detail:**
+- g₁: R_c + e_max(θ) + δ_c - x_aux ≤ 0  (central hole clearance)
+- g₂: x_aux + e_x(θ) - (L - δ_e) ≤ 0  (right edge clearance)
+- g₃: e_y(θ) - (W - δ_e) ≤ 0  (top/bottom edge clearance)
+- g₄: a - α_max · b ≤ 0  (aspect ratio limit)
 
-**Key Points:**
-- Objective: Minimize maximum von Mises stress
-- 5 nonlinear inequality constraints
-- Box bounds on all variables
-- **Note:** Objective requires FEA solve at each evaluation
+**Box Bounds (Side Constraints):**
+$$\mathbf{x}^L \leq \mathbf{x} \leq \mathbf{x}^U$$
+
+This notation means each design variable is bounded:
+- x^L = lower bounds = [38, 6, 6, -π/2]
+- x^U = upper bounds = [150, 15, 15, +π/2]
+
+**Von Mises Stress (2D Plane Stress):**
+$$\sigma_{vM} = \sqrt{\sigma_{xx}^2 - \sigma_{xx}\sigma_{yy} + \sigma_{yy}^2 + 3\tau_{xy}^2}$$
 
 **Speaker Notes:**
-- Emphasize this is a "min-max" problem (minimax)
-- Constraints use AABB (Axis-Aligned Bounding Box) for rotated ellipse clearance
+- Emphasize this is a "min-max" problem (minimax) - we minimize the maximum stress
+- Box bounds are simple inequality constraints on individual variables
+- Von Mises stress is computed at every node in the FE mesh; we take the maximum
 
 ---
 
@@ -163,30 +171,69 @@ For rotated ellipse:
 - Multiple local minima expected
 - Global optimum not guaranteed, but robust exploration
 
-**[FIGURE: Convergence history showing all runs]**
-*Annotation: Use the convergence history plot showing gray lines (other runs) and blue line (best run). Highlight the spread indicating multiple local minima.*
+**Speaker Notes:**
+- SQP (Sequential Quadratic Programming) is efficient for smooth nonlinear problems
+- Central differences more accurate than forward differences (but 2× cost)
+- LHS provides better coverage of design space than random sampling
 
 ---
 
-## Slide 9: FEA Implementation (1 min)
+## Slide 9: FEA & Baseline Analysis (1.5 min)
 
-**Title:** Finite Element Analysis
+**Title:** Finite Element Analysis & Baseline Reference
 
-**Content:**
-- **Mesh:** Adaptive with Hmax = min_feature / 2
-- **Elements:** ~38,000 triangular elements
-- **Nodes:** ~77,000
-- **Solve time:** ~0.3-0.5 seconds per evaluation
+**FEA Implementation:**
+| Parameter | Value |
+|-----------|-------|
+| Mesh type | Adaptive triangular |
+| Elements | ~38,000 |
+| Nodes | ~77,000 |
+| Solve time | ~0.3-0.5 s per evaluation |
 
-**Von Mises Stress:**
-σ_vM = √(σ_xx² - σ_xx·σ_yy + σ_yy² + 3τ_xy²)
+**Baseline Analysis (Central Hole Only):**
+| Metric | Value |
+|--------|-------|
+| Max σ_vM | **360.28 MPa** |
+| Stress Concentration Factor | K_t = 3.60 |
+| Location | Top of central hole (0, 20) mm |
 
-**[FIGURE: Mesh visualization or stress contour plot]**
-*Annotation: Show the mesh near the holes, or a stress contour plot from the optimal design*
+*This baseline serves as the reference for measuring optimization improvement.*
+
+**[FIGURE: Baseline stress contour showing central hole only]**
+*Annotation: Show the stress distribution for the baseline case. Highlight the max stress location at the top/bottom of the central hole where σ_max ≈ 3σ₀*
+
+**Speaker Notes:**
+- Theoretical K_t for circular hole in infinite plate is 3.0
+- Our K_t = 3.6 is higher due to finite plate width effects
+- Every optimization evaluation is compared against this baseline
 
 ---
 
-## Slide 10: Results - Optimal Design (1.5 min)
+## Slide 10: Convergence History (1 min)
+
+**Title:** Multi-Start Optimization Convergence
+
+**[FIGURE: Convergence history showing ALL runs - dedicated full slide]**
+*Annotation: Use the convergence history plot with:
+- Gray lines: All 248 optimization runs
+- Blue bold line: Best run (Run #199)
+- Red dashed line: Baseline stress (360.28 MPa)
+- Highlight the spread of final objectives indicating multiple local minima*
+
+**Key Observations:**
+- Wide spread in final objectives (320 - 413 MPa)
+- Many runs converge to local minima
+- Best run achieves 11.1% reduction below baseline
+- Justifies the multi-start approach
+
+**Statistics:**
+- Total function evaluations: 19,864
+- Average per run: ~80 evaluations
+- Total computation time: 2.6 hours
+
+---
+
+## Slide 11: Results - Optimal Design (1.5 min)
 
 **Title:** Optimization Results
 
@@ -208,7 +255,7 @@ For rotated ellipse:
 
 ---
 
-## Slide 11: Stress Distribution Analysis (1 min)
+## Slide 12: Stress Distribution Analysis (1 min)
 
 **Title:** Detailed Stress Analysis
 
@@ -225,7 +272,7 @@ For rotated ellipse:
 
 ---
 
-## Slide 12: Why Circular? (1 min)
+## Slide 13: Why Circular? (1 min)
 
 **Title:** Physical Interpretation
 
@@ -245,7 +292,7 @@ For rotated ellipse:
 
 ---
 
-## Slide 13: Fatigue Life Implications (1.5 min)
+## Slide 14: Fatigue Life Implications (1.5 min)
 
 **Title:** Fatigue Life Extension
 
@@ -269,7 +316,7 @@ Life improvement: N_opt/N_base = (σ_base/σ_opt)^m
 
 ---
 
-## Slide 14: Computational Cost (0.5 min)
+## Slide 15: Computational Cost (0.5 min)
 
 **Title:** Computational Summary
 
@@ -288,7 +335,7 @@ Life improvement: N_opt/N_base = (σ_base/σ_opt)^m
 
 ---
 
-## Slide 15: Conclusions (1 min)
+## Slide 16: Conclusions (1 min)
 
 **Title:** Conclusions
 
@@ -306,7 +353,7 @@ Life improvement: N_opt/N_base = (σ_base/σ_opt)^m
 
 ---
 
-## Slide 16: Questions?
+## Slide 17: Questions?
 
 **Title:** Questions & Discussion
 
@@ -352,11 +399,12 @@ options = optimoptions('fmincon', ...
 Figures to export from MATLAB (use `exportgraphics` or `saveas`):
 
 1. **geometry_comparison.png** - 3-panel geometry comparison
-2. **stress_comparison.png** - 3-panel stress field comparison
-3. **stress_detail_zoomed.png** - Zoomed view near holes
-4. **convergence_history.png** - All runs + best run convergence
-5. **objective_distribution.png** - Histogram of final objectives
-6. **optimization_animation.gif** - Animation of best run
+2. **baseline_stress.png** - Baseline stress contour (central hole only)
+3. **stress_comparison.png** - 3-panel stress field comparison
+4. **stress_detail_zoomed.png** - Zoomed view near holes
+5. **convergence_history.png** - All runs + best run convergence (FULL SIZE for dedicated slide)
+6. **objective_distribution.png** - Histogram of final objectives
+7. **optimization_animation.gif** - Animation of best run
 
 **MATLAB export commands:**
 ```matlab
@@ -376,10 +424,12 @@ exportgraphics(fig, 'geometry_comparison.png', 'Resolution', 300)
 |---------|--------|------|
 | Introduction & Motivation | 1-3 | 3.0 min |
 | Problem Formulation | 4-7 | 4.5 min |
-| Methodology | 8-9 | 2.5 min |
-| Results & Analysis | 10-13 | 4.0 min |
-| Conclusions | 14-16 | 1.0 min |
-| **Total** | **16** | **15.0 min** |
+| Methodology & Baseline | 8-10 | 4.0 min |
+| Results & Analysis | 11-14 | 4.5 min |
+| Conclusions | 15-17 | 1.5 min |
+| **Total** | **17** | **~17.5 min** |
+
+*Note: Slightly over 15 min - can trim fatigue slide or computational cost slide if needed*
 
 ---
 
